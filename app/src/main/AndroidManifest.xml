@@ -1,24 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- The whole point of the app: see the phone's own connectivity and drive the AP. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
-    <!-- The loop is re-armed after a reboot; nothing else survives one. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
-    <!-- BLE presence: the trigger is "my bonded iPad is nearby". Scanning needs the
-         new Android 12 neverForLocation flag so we don't have to hold location just to
-         see a device we already paired with. BLUETOOTH_CONNECT lets us read the bond
-         list and each device's name. -->
+    <!-- Presence: the trigger is a bonded iPad being nearby. The neverForLocation flag
+         means we do not have to hold location just to see a device we already paired
+         with; BLUETOOTH_CONNECT lets us read the bond list and each device name. -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <!-- Legacy scan path for the pre-12 case; harmless on newer LightOS builds. -->
     <uses-permission android:name="android.permission.BLUETOOTH"
         android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
@@ -26,10 +22,9 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"
         android:maxSdkVersion="30" />
 
-    <!-- The watch loop is a foreground service: BLE scanning while the screen is off is
-         throttled to almost nothing otherwise, and the whole feature is "hotspot comes
-         up while the phone is in my pocket". connectedDevice is the honest subtype -- we
-         are reacting to a nearby paired device. -->
+    <!-- The watch loop is a foreground service: a BLE scan with the screen off is
+         throttled to almost nothing otherwise, and the whole point is a hotspot that
+         comes up while the phone is in a pocket. connectedDevice is the honest subtype. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 
@@ -56,15 +51,14 @@
             </intent-filter>
         </activity>
 
-        <!-- The presence watcher. Runs only while auto mode is on; it scans for the
-             trigger device, brings the AP up when it appears, and tears it down when no
-             client stays. See WatchService. -->
+        <!-- The presence watcher. Runs only while auto mode is on: scans for the trigger
+             device, raises the AP when it appears, tears it down when no client stays. -->
         <service
             android:name=".service.WatchService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
 
-        <!-- Shizuku's provider. Required so the app can bind the Shizuku service that
+        <!-- Shizuku provider: required so the app can bind the Shizuku service that
              carries the privileged tethering call. -->
         <provider
             android:name="rikka.shizuku.ShizukuProvider"
