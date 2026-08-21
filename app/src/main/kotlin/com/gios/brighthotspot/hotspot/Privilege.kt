@@ -110,7 +110,7 @@ class Privilege(context: Context) {
      * `com.android.shell` (UID 2000) -- which is exactly who the Shizuku binder is.
      */
     private fun tetheringManager(): Any? = runCatching {
-        val binder: IBinder = SystemServiceHelper.getSystemService(Context.TETHERING_SERVICE)
+        val binder: IBinder = SystemServiceHelper.getSystemService("tethering")
             ?: return null
         val wrapped = ShizukuBinderWrapper(binder)
 
