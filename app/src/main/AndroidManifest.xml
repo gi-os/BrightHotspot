@@ -28,6 +28,16 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 
+    <!--
+      BrightControl, so the Diagnostic screen can hand it the one line that starts Shizuku.
+      Package visibility on API 30+ is opt-in: without this, asking the package manager whether
+      BrightControl is installed throws even when it is, and an explicit intent aimed at it
+      resolves to nothing. Named rather than a broad query, so this can see one app and no others.
+    -->
+    <queries>
+        <package android:name="com.gios.lightcontrol" />
+    </queries>
+
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
 
     <application

@@ -15,13 +15,19 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.gios.brighthotspot.ble.Bonded
 import com.gios.brighthotspot.core.Phase
+import com.gios.brighthotspot.hotspot.AdbSetup
 import com.gios.brighthotspot.ui.theme.Dim
 import com.gios.brighthotspot.ui.theme.Faint
 
@@ -175,6 +181,10 @@ fun DiagnosticScreen(
     rows: List<ScanRow>,
     onRequestShizuku: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val hasControl = remember { AdbSetup.controlInstalled(context) }
+    var handoff by remember { mutableStateOf<String?>(null) }
+
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         SectionHeader("Privilege")
         MenuRow(
@@ -184,6 +194,34 @@ fun DiagnosticScreen(
             detail = if (shizukuReady) "OK" else "Fix",
             onClick = { if (!shizukuReady) onRequestShizuku() },
         )
+        // **The step that made this app look broken.** Shizuku's own way in is the
+        // wireless-debugging pairing flow, and Android tears it down on every reboot -- so it is
+        // a dance you repeat rather than a setup you finish, and repeating it is where people
+        // stop. BrightControl already holds an adb shell to this phone's own daemon, which is the
+        // same privilege by a route that survives. It runs the one line; Shizuku still asks, app
+        // by app, in its own screen afterwards.
+        if (!shizukuReady) {
+            MenuRow(
+                label = "Start Shizuku with BrightControl",
+                sub = if (hasControl) {
+                    "opens BrightControl, which shows the command and runs it over its adb shell"
+                } else {
+                    "BrightControl is not installed. Get it from BrightMarket and set up its " +
+                        "adb connection first -- then this is one tap after every reboot."
+                },
+                detail = if (hasControl) ">" else "--",
+                onClick = {
+                    if (hasControl && !AdbSetup.open(context)) {
+                        handoff = "BrightControl would not open."
+                    }
+                },
+            )
+            handoff?.let {
+                Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                    Text(it, style = MaterialTheme.typography.bodyMedium, color = Faint)
+                }
+            }
+        }
         MenuRow(label = "Access point", detail = apState)
 
         SectionHeader("Address resolution")

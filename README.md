@@ -49,6 +49,23 @@ detects presence and shows what it *would* do -- it just cannot flip the switch.
 4. Start Shizuku and grant BrightHotspot (**Diagnostic -> Shizuku -> Fix**).
 5. Turn on **Auto mode**.
 
+### Starting Shizuku without the pairing dance
+
+Shizuku's own route in is the wireless-debugging pairing flow, and Android tears it down on
+**every reboot** -- so it is a dance you repeat rather than a setup you finish, and repeating it
+is where people give up on this app.
+
+If you have **BrightControl** with its adb connection set up, you do not have to. It already
+holds a shell to this phone's own daemon, which is the same privilege by a route that survives.
+Two ways:
+
+- **Diagnostic -> Start Shizuku with BrightControl** in this app, which hands the request over
+  and lets BrightControl show you the command before it runs it.
+- **BrightControl -> ADB -> START SHIZUKU**, if you are already in there.
+
+Either way Shizuku still asks you, app by app, in its own screen afterwards. Starting it grants
+nothing on its own.
+
 You can also just tap **Start hotspot now** any time; the manual button skips the whole guess.
 
 ## Install via BrightMarket
