@@ -70,7 +70,7 @@ You can also just tap **Start hotspot now** any time; the manual button skips th
 
 ## Install via BrightMarket
 
-Scan the code from [gi-os.github.io/brightmarket-index/browse.html](https://gi-os.github.io/brightmarket-index/browse.html)
+Scan the code from [brightmarket.gzl.dev](https://brightmarket.gzl.dev)
 with BrightMarket installed. Every push to `main` cuts a signed APK that Obtainium picks up.
 
 ## Build
@@ -86,3 +86,21 @@ state is `SharedPreferences`, so there is no KSP in the build.
 
 Shake the phone three times, or answer the crash prompt on next launch. Reports file into
 the private `gi-os/light-reports` repo, same as the rest of the fleet.
+
+<!-- bright-footer:begin -->
+---
+
+## Bright\*
+
+*Instant Hotspot for a phone Apple is never going to support.*
+
+26 open-source apps for the **Light Phone III** — camera, music, maps, messages,
+reading, transit, games. The phone has no app store, so they install by sideload: scan one
+code from **[brightmarket.gzl.dev](https://brightmarket.gzl.dev)** and BrightMarket keeps them updated.
+
+[Roll](https://github.com/gi-os/Roll) · [BrightMusic](https://github.com/gi-os/BrightMusic) · [BrightWay](https://github.com/gi-os/BrightWay) · [BrightChat](https://github.com/gi-os/BrightChat) · [BrightControl](https://github.com/gi-os/BrightControl) · [BrightRemote](https://github.com/gi-os/BrightRemote) · [browse all 26 →](https://brightmarket.gzl.dev)
+
+The Light Phone does not sponsor or endorse any of these. Built by
+[Giovanni Lupo](https://github.com/gi-os) — if this one is useful to you, a ⭐ helps the next
+person find it.
+<!-- bright-footer:end -->
