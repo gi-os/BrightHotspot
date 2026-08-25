@@ -92,8 +92,6 @@ the private `gi-os/light-reports` repo, same as the rest of the fleet.
 
 ## Bright\*
 
-*Instant Hotspot for a phone Apple is never going to support.*
-
 26 open-source apps for the **Light Phone III** — camera, music, maps, messages,
 reading, transit, games. The phone has no app store, so they install by sideload: scan one
 code from **[brightmarket.gzl.dev](https://brightmarket.gzl.dev)** and BrightMarket keeps them updated.
