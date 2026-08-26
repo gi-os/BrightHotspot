@@ -1,54 +1,187 @@
 #!/usr/bin/env python3
+"""Build BrightHotspot's launcher mark.
+
+Part of the unified Bright* icon set. Every mark in the collection is drawn on
+the same 108x108 adaptive-icon canvas, inside the same 18..90 safe zone, at the
+same two stroke weights, in white on black and nothing else. The Light Phone
+III panel is black and white; a mark with a mid-tone in it dithers.
+
+Edit MARK below and re-run. The vector outputs need nothing but the standard
+library. The raster outputs need Pillow and cairosvg, and are skipped with a
+message if those are missing, because the vectors are what actually ship on
+API 26 and up.
+
+    python3 scripts/generate_icon.py
 """
-Regenerate the BrightHotspot launcher icon: a signal dot with three rising arcs -- the
-universal hotspot mark -- in white line art on black, matching the Light Phone III tool
-family. Geometry is defined once on a 108-unit canvas and rasterised per density.
 
-    python3 scripts/generate_icon.py    # needs Pillow
-"""
-from __future__ import annotations
-import math, os
-from PIL import Image, ImageDraw
+import os
+import re
 
-RES = os.path.join(os.path.dirname(__file__), "..", "app", "src", "main", "res")
-CANVAS = 108
-CX, CY = 54.0, 66.0
-DOT_R = 6.0
-STROKE = 5.0
-ARCS = [15.0, 27.0, 39.0]          # radii of the three arcs, centered on the dot
-SS = 8                              # supersample
-DENS = {"mdpi": 48, "hdpi": 72, "xhdpi": 96, "xxhdpi": 144, "xxxhdpi": 192}
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# ---- the mark ---------------------------------------------------------------
+# Each entry is (path data, stroke width, even-odd fill). A stroke width of 0
+# means the path is filled instead of stroked.
+
+MARK = [
+    ('M48.50,56.00 A5.50,5.50 0 1 1 59.50,56.00 A5.50,5.50 0 1 1 48.50,56.00 Z', 0, False),
+    ('M63.85,43.39 A16.00,16.00 0 0 1 63.85,68.61', 5, False),
+    ('M70.62,34.72 A27.00,27.00 0 0 1 70.62,77.28', 5, False),
+    ('M44.15,68.61 A16.00,16.00 0 0 1 44.15,43.39', 5, False),
+    ('M37.38,77.28 A27.00,27.00 0 0 1 37.38,34.72', 5, False),
+]
+
+# Where the mark is written, and at what viewport. 108 is the adaptive-icon
+# canvas; 240 is the LightOS splash mark, which is the only place a LightOS
+# tool can show a mark of its own.
+TARGETS = [
+    ('app/src/main/res/drawable/ic_launcher_foreground.xml', 108),
+]
+
+# Legacy rasters: (path, pixels, circular mask, inset, transparent plate).
+# Inset shrinks the mark inside the plate - a legacy square icon gets no
+# launcher mask, so it needs the margin the mask would otherwise have given it.
+# A transparent plate is for an adaptive foreground layer, which is composited
+# over the plate rather than carrying one of its own.
+RASTERS = [
+    ('app/src/main/res/mipmap-hdpi/ic_launcher.png', 72, False, 0.72, False),
+    ('app/src/main/res/mipmap-hdpi/ic_launcher_round.png', 72, True, 0.72, False),
+    ('app/src/main/res/mipmap-mdpi/ic_launcher.png', 48, False, 0.72, False),
+    ('app/src/main/res/mipmap-mdpi/ic_launcher_round.png', 48, True, 0.72, False),
+    ('app/src/main/res/mipmap-xhdpi/ic_launcher.png', 96, False, 0.72, False),
+    ('app/src/main/res/mipmap-xhdpi/ic_launcher_round.png', 96, True, 0.72, False),
+    ('app/src/main/res/mipmap-xxhdpi/ic_launcher.png', 144, False, 0.72, False),
+    ('app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png', 144, True, 0.72, False),
+    ('app/src/main/res/mipmap-xxxhdpi/ic_launcher.png', 192, False, 0.72, False),
+    ('app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png', 192, True, 0.72, False),
+]
+
+# Files that are the same in every app: the black plate, and the adaptive-icon
+# wrapper that points the launcher at the plate and the mark.
+STATIC = [
+    ('app/src/main/res/drawable/ic_launcher_background.xml', '<?xml version="1.0" encoding="utf-8"?>\n<!-- Solid black plate. The whole set is black and white; nothing else belongs here. -->\n<vector xmlns:android="http://schemas.android.com/apk/res/android"\n    android:width="108dp"\n    android:height="108dp"\n    android:viewportWidth="108"\n    android:viewportHeight="108">\n    <path\n        android:pathData="M0,0 H108 V108 H0 Z"\n        android:fillColor="#000000" />\n</vector>\n'),
+    ('app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml', '<?xml version="1.0" encoding="utf-8"?>\n<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n    <background android:drawable="@drawable/ic_launcher_background" />\n    <foreground android:drawable="@drawable/ic_launcher_foreground" />\n    <monochrome android:drawable="@drawable/ic_launcher_foreground" />\n</adaptive-icon>\n'),
+    ('app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml', '<?xml version="1.0" encoding="utf-8"?>\n<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n    <background android:drawable="@drawable/ic_launcher_background" />\n    <foreground android:drawable="@drawable/ic_launcher_foreground" />\n    <monochrome android:drawable="@drawable/ic_launcher_foreground" />\n</adaptive-icon>\n'),
+]
+
+STROKE = ('        android:fillColor="#00000000"\n'
+          '        android:strokeColor="#FFFFFF"\n'
+          '        android:strokeWidth="%g"\n'
+          '        android:strokeLineCap="round"\n'
+          '        android:strokeLineJoin="round" />')
+
+HEADER = '''<?xml version="1.0" encoding="utf-8"?>
+<!--
+  BrightHotspot launcher mark. One of the unified Bright* set: 108 canvas, 18..90
+  safe zone, white on black, no greys and no colour anywhere.
+
+  Generated by scripts/generate_icon.py - edit the geometry there, not here.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="%(vp)sdp"
+    android:height="%(vp)sdp"
+    android:viewportWidth="%(vp)s"
+    android:viewportHeight="%(vp)s">
+%(paths)s
+</vector>
+'''
 
 
-def render(px: int, round_icon: bool) -> Image.Image:
-    s = px * SS
-    img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    k = s / CANVAS
-    # background
-    if round_icon:
-        d.ellipse([0, 0, s - 1, s - 1], fill=(0, 0, 0, 255))
-    else:
-        d.rounded_rectangle([0, 0, s - 1, s - 1], radius=int(s * 0.16), fill=(0, 0, 0, 255))
-    # dot
-    cx, cy, r = CX * k, CY * k, DOT_R * k
-    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(255, 255, 255, 255))
-    # arcs: quarter-ish upward sweep from 200deg to 340deg
-    for rad in ARCS:
-        rr = rad * k
-        bbox = [cx - rr, cy - rr, cx + rr, cy + rr]
-        d.arc(bbox, start=200, end=340, fill=(255, 255, 255, 255), width=int(STROKE * k))
-    return img.resize((px, px), Image.LANCZOS)
+def scale_path(d, k):
+    """Multiply every number in a path by k.
+
+    Safe on this data because every path is absolute and uniformly scaled, so
+    arc rx/ry scale with everything else. The large-arc and sweep flags are 0
+    or 1 and a naive pass would scale them into nonsense, so each arc command
+    is matched whole and its three flag fields copied through untouched."""
+    if k == 1.0:
+        return d
+    num = re.compile(r'-?\d*\.?\d+')
+    arc = re.compile(r'A\s*(-?[\d.]+)\s*,?\s*(-?[\d.]+)\s+(-?[\d.]+)\s+([01])\s*,?\s*([01])\s+')
+
+    def one(s):
+        return ('%.3f' % (float(s) * k)).rstrip('0').rstrip('.')
+
+    def plain(s):
+        return num.sub(lambda m: one(m.group(0)), s)
+
+    out, i = [], 0
+    for m in arc.finditer(d):
+        out.append(plain(d[i:m.start()]))
+        out.append('A%s,%s %s %s %s ' % (one(m.group(1)), one(m.group(2)),
+                                         m.group(3), m.group(4), m.group(5)))
+        i = m.end()
+    out.append(plain(d[i:]))
+    return ''.join(out)
 
 
-def main() -> None:
-    for name, px in DENS.items():
-        folder = os.path.join(RES, f"mipmap-{name}")
-        os.makedirs(folder, exist_ok=True)
-        render(px, False).save(os.path.join(folder, "ic_launcher.png"))
-        render(px, True).save(os.path.join(folder, "ic_launcher_round.png"))
-    print("icons written")
+def render(vp):
+    k = vp / 108.0
+    body = []
+    for d, w, even in MARK:
+        pd = scale_path(d, k)
+        if w == 0:
+            ft = '\n        android:fillType="evenOdd"' if even else ''
+            body.append('    <path\n        android:pathData="%s"\n'
+                        '        android:fillColor="#FFFFFF"%s />' % (pd, ft))
+        else:
+            body.append('    <path\n        android:pathData="%s"\n%s'
+                        % (pd, STROKE % (w * k)))
+    return HEADER % {'vp': vp, 'paths': '\n'.join(body)}
 
 
-if __name__ == "__main__":
-    main()
+def svg(inset=1.0, transparent=False):
+    m = (1 - inset) * 54
+    s = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">']
+    if not transparent:
+        s.append('<rect width="108" height="108" fill="#000000"/>')
+    s += [
+         '<g transform="translate(%.3f,%.3f) scale(%s)">' % (m, m, inset)]
+    for d, w, even in MARK:
+        if w == 0:
+            fr = ' fill-rule="evenodd"' if even else ''
+            s.append('<path d="%s" fill="#FFFFFF"%s/>' % (d, fr))
+        else:
+            s.append('<path d="%s" fill="none" stroke="#FFFFFF" stroke-width="%s" '
+                     'stroke-linecap="round" stroke-linejoin="round"/>' % (d, w))
+    s.append('</g></svg>')
+    return ''.join(s)
+
+
+def write(rel, text):
+    p = os.path.join(ROOT, rel)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    open(p, 'w').write(text)
+    print('wrote', rel)
+
+
+def rasters():
+    try:
+        import io
+        import cairosvg
+        from PIL import Image, ImageDraw
+    except ImportError:
+        print('Pillow/cairosvg not installed - skipped the rasters. The adaptive '
+              'icon is what ships on API 26 and up.')
+        return
+    for rel, px, round_, inset, transparent in RASTERS:
+        raw = cairosvg.svg2png(bytestring=svg(inset, transparent).encode(),
+                               output_width=px * 4, output_height=px * 4)
+        im = Image.open(io.BytesIO(raw)).convert('RGBA')
+        if round_:
+            mask = Image.new('L', im.size, 0)
+            ImageDraw.Draw(mask).ellipse([0, 0, im.size[0] - 1, im.size[1] - 1], fill=255)
+            im.putalpha(mask)
+        im = im.resize((px, px), Image.LANCZOS)
+        p = os.path.join(ROOT, rel)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        im.save(p, 'WEBP' if rel.endswith('.webp') else 'PNG')
+        print('wrote', rel)
+
+
+if __name__ == '__main__':
+    for rel, vp in TARGETS:
+        write(rel, render(vp))
+    for rel, text in STATIC:
+        write(rel, text)
+    rasters()

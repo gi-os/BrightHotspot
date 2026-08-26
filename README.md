@@ -1,3 +1,5 @@
+<img src="docs/icon.png" alt="" width="72" align="left" />
+
 # BrightHotspot
 
 An Instant-Hotspot clone for the **Light Phone III**, for the case Apple never covered:
