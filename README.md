@@ -2,6 +2,8 @@
 
 # BrightHotspot
 
+[**⬇ Download the latest APK**](https://github.com/gi-os/BrightHotspot/releases/latest) · free, open source.
+
 An Instant-Hotspot clone for the **Light Phone III**, for the case Apple never covered:
 waking the phone's own hotspot for a device that is *not* an iPhone. Launcher label:
 **Hotspot**, package `com.gios.brighthotspot`.
