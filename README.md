@@ -103,6 +103,7 @@ release key. Use fresh passwords when prompted.
 ```sh
 gh workflow disable build.yml --repo gi-os/BrightHotspot
 
+umask 077
 keytool -genkeypair -storetype JKS -keystore brighthotspot-new.jks -alias brighthotspot-release \
   -keyalg RSA -keysize 3072 -validity 10000
 
@@ -130,7 +131,24 @@ offline to create the lineage.
 Until the new fingerprint is committed, the identical original/current pins deliberately
 make release signing fail closed.
 
-In [**Settings → Secrets and variables → Actions**](https://github.com/gi-os/BrightHotspot/settings/secrets/actions), set these five secrets:
+In [BrightHotspot's environment settings](https://github.com/gi-os/BrightHotspot/settings/environments),
+create an environment named `release`. Under **Deployment branches and tags**, choose
+**Selected branches and tags** and add a single **Branch** rule for `main`, with no tag
+rules. Add the five secrets below to that environment only. Do not use repository-wide
+secrets or upload the original key or its passwords.
+
+For a new environment, the equivalent CLI setup is:
+
+```sh
+gh api --method PUT repos/gi-os/BrightHotspot/environments/release --input - <<'JSON'
+{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}
+JSON
+gh api --method POST repos/gi-os/BrightHotspot/environments/release/deployment-branch-policies \
+  -f name=main -f type=branch
+```
+
+If `release` already exists, inspect its rules in the settings page and remove any
+branch/tag rules other than the single `main` branch rule instead of adding duplicates.
 
 | Secret | Value |
 | --- | --- |
@@ -143,12 +161,27 @@ In [**Settings → Secrets and variables → Actions**](https://github.com/gi-os
 On Linux, upload the files without printing their contents and enter the other values when prompted:
 
 ```sh
-base64 -w 0 brighthotspot-new.jks | gh secret set RELEASE_KEYSTORE_BASE64 --repo gi-os/BrightHotspot
-base64 -w 0 brighthotspot.lineage | gh secret set SIGNING_LINEAGE_BASE64 --repo gi-os/BrightHotspot
-gh secret set KEYSTORE_PASSWORD --repo gi-os/BrightHotspot
-gh secret set KEY_ALIAS --repo gi-os/BrightHotspot
-gh secret set KEY_PASSWORD --repo gi-os/BrightHotspot
+base64 -w 0 brighthotspot-new.jks | gh secret set RELEASE_KEYSTORE_BASE64 --env release --repo gi-os/BrightHotspot
+base64 -w 0 brighthotspot.lineage | gh secret set SIGNING_LINEAGE_BASE64 --env release --repo gi-os/BrightHotspot
+gh secret set KEYSTORE_PASSWORD --env release --repo gi-os/BrightHotspot
+gh secret set KEY_ALIAS --env release --repo gi-os/BrightHotspot --body brighthotspot-release
+gh secret set KEY_PASSWORD --env release --repo gi-os/BrightHotspot
 ```
+
+If any of these five secrets were previously set at repository scope, remove those
+copies in [repository Actions secrets](https://github.com/gi-os/BrightHotspot/settings/secrets/actions)
+after setting the environment secrets:
+
+```sh
+for secret in RELEASE_KEYSTORE_BASE64 SIGNING_LINEAGE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+  gh secret delete "$secret" --repo gi-os/BrightHotspot
+done
+```
+
+The release job declares `environment: release` and runs only for `refs/heads/main`;
+manual runs on other branches skip it without accessing the environment. `check.yml`
+continues to test and compile branches without signing secrets. `REPORT_TOKEN` remains
+an optional repository secret for shake-to-report and is not a signing credential.
 
 CI signs with the new key using APK Signature Scheme v3 and verifies the proof of rotation
 from the original pin to the new pin. BrightHotspot requires Android API 29, so no supported
@@ -157,7 +190,7 @@ but a catalog that compares only the current certificate can still hide it from 
 the old signer. Coordinate the BrightMarket catalog/updater transition before re-enabling
 publishing, and only re-enable it for an authorized release.
 
-A push to `main` (other than ignored paths) or a manual run of `build.yml` builds,
+A push to `main` (other than ignored paths) or a manual run of `build.yml` on `main` builds,
 signs, tags, and publishes. Tag pushes do not trigger it. Branch and PR checks
 in `check.yml` publish nothing.
 
