@@ -88,6 +88,112 @@ with BrightMarket installed. Every push to `main` cuts a signed APK that Obtaini
 The LP3 is arm64 only, so the APK ships one ABI. Java 17. No annotation processors --
 state is `SharedPreferences`, so there is no KSP in the build.
 
+Without signing credentials, the release APK is unsigned and debug builds use the standard Android
+debug key. Neither can update an installed production APK.
+
+### Release signing
+
+These instructions are for Giovanni, for package `com.gios.brighthotspot`.
+
+Before merging the signing change, disable **Build & Release APK** so the merge does
+not publish. In a private directory outside the checkout, use Android Build Tools
+35.0.0 to generate the replacement key and create a proof of rotation from the original
+release key. Use fresh passwords when prompted.
+
+```sh
+gh workflow disable build.yml --repo gi-os/BrightHotspot
+
+umask 077
+keytool -genkeypair -storetype JKS -keystore brighthotspot-new.jks -alias brighthotspot-release \
+  -keyalg RSA -keysize 3072 -validity 10000
+
+apksigner rotate --out brighthotspot.lineage \
+  --old-signer --ks /path/to/original/brighthotspot.jks --ks-key-alias brighthotspot \
+  --set-installed-data true --set-rollback false \
+  --new-signer --ks brighthotspot-new.jks --ks-key-alias brighthotspot-release
+
+apksigner lineage --in brighthotspot.lineage --print-certs
+```
+
+Verify that signer #1's SHA-256 digest matches `signing-lineage-root-fingerprint.txt`,
+then replace `signing-fingerprint.txt` in the checkout with signer #2's SHA-256 digest:
+
+```sh
+apksigner lineage --in brighthotspot.lineage --print-certs \
+  | sed -n 's/^Signer #2 in lineage certificate SHA-256 digest: //p' \
+  > /path/to/BrightHotspot/signing-fingerprint.txt
+```
+
+Commit that fingerprint change on the PR branch before merging. Do not change
+the original fingerprint. Keep the original private key out of CI; it is only needed
+offline to create the lineage.
+
+Until the new fingerprint is committed, the identical original/current pins deliberately
+make release signing fail closed.
+
+In [BrightHotspot's environment settings](https://github.com/gi-os/BrightHotspot/settings/environments),
+create an environment named `release`. Under **Deployment branches and tags**, choose
+**Selected branches and tags** and add a single **Branch** rule for `main`, with no tag
+rules. Add the five secrets below to that environment only. Do not use repository-wide
+secrets or upload the original key or its passwords.
+
+For a new environment, the equivalent CLI setup is:
+
+```sh
+gh api --method PUT repos/gi-os/BrightHotspot/environments/release --input - <<'JSON'
+{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}
+JSON
+gh api --method POST repos/gi-os/BrightHotspot/environments/release/deployment-branch-policies \
+  -f name=main -f type=branch
+```
+
+If `release` already exists, inspect its rules in the settings page and remove any
+branch/tag rules other than the single `main` branch rule instead of adding duplicates.
+
+| Secret | Value |
+| --- | --- |
+| `RELEASE_KEYSTORE_BASE64` | Base64-encoded `brighthotspot-new.jks` |
+| `SIGNING_LINEAGE_BASE64` | Base64-encoded `brighthotspot.lineage` |
+| `KEYSTORE_PASSWORD` | New keystore password |
+| `KEY_ALIAS` | `brighthotspot-release` |
+| `KEY_PASSWORD` | New key password |
+
+On Linux, upload the files without printing their contents and enter the other values when prompted:
+
+```sh
+base64 -w 0 brighthotspot-new.jks | gh secret set RELEASE_KEYSTORE_BASE64 --env release --repo gi-os/BrightHotspot
+base64 -w 0 brighthotspot.lineage | gh secret set SIGNING_LINEAGE_BASE64 --env release --repo gi-os/BrightHotspot
+gh secret set KEYSTORE_PASSWORD --env release --repo gi-os/BrightHotspot
+gh secret set KEY_ALIAS --env release --repo gi-os/BrightHotspot --body brighthotspot-release
+gh secret set KEY_PASSWORD --env release --repo gi-os/BrightHotspot
+```
+
+If any of these five secrets were previously set at repository scope, remove those
+copies in [repository Actions secrets](https://github.com/gi-os/BrightHotspot/settings/secrets/actions)
+after setting the environment secrets:
+
+```sh
+for secret in RELEASE_KEYSTORE_BASE64 SIGNING_LINEAGE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+  gh secret delete "$secret" --repo gi-os/BrightHotspot
+done
+```
+
+The release job declares `environment: release` and runs only for `refs/heads/main`;
+manual runs on other branches skip it without accessing the environment. `check.yml`
+continues to test and compile branches without signing secrets. `REPORT_TOKEN` remains
+an optional repository secret for shake-to-report and is not a signing credential.
+
+CI signs with the new key using APK Signature Scheme v3 and verifies the proof of rotation
+from the original pin to the new pin. BrightHotspot requires Android API 29, so no supported
+device needs a v1/v2 signature or the old private key. Android can accept an in-place update,
+but a catalog that compares only the current certificate can still hide it from users on
+the old signer. Coordinate the BrightMarket catalog/updater transition before re-enabling
+publishing, and only re-enable it for an authorized release.
+
+A push to `main` (other than ignored paths) or a manual run of `build.yml` on `main` builds,
+signs, tags, and publishes. Tag pushes do not trigger it. Branch and PR checks
+in `check.yml` publish nothing.
+
 ## Reporting bugs
 
 Shake the phone three times, or answer the crash prompt on next launch. Reports file into
